@@ -3,8 +3,10 @@
 //! A self-contained identifier for files and directories.
 
 pub mod constants;
+pub mod minimal;
 pub mod short;
 pub mod standard;
+pub mod storage;
 
 /// Check if FSID is in short format (contains lowercase letters)
 pub fn is_short_format(fsid: &str) -> bool {

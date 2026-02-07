@@ -2,12 +2,13 @@
 
 A self-contained identifier for files and directories.
 
-## Two Formats
+## Three Formats
 
-| Format | Encoding | Length | Check |
-|--------|----------|--------|-------|
-| **Standard** | Base10 (0-9) | 20-40 digits | 2 digits |
-| **Short** | Base36 (0-9, a-z) | 7-25 chars | 1 char |
+| Format | Encoding | Length | Storage | Reversible |
+|--------|----------|--------|---------|------------|
+| **Standard** | Base10 | 20-40 digits | Optional | ✓ |
+| **Short** | Base36 | 7-25 chars | Optional | ✓ |
+| **Minimal** | Base10 | 13 digits | Required | ✗ (hash-based) |
 
 ---
 
@@ -22,7 +23,36 @@ PP T M NNNNNNNN...NNN CC
 └──────────────────────── prefix (00-25)
 ```
 
-### Prefixes (Standard)
+---
+
+## Short Format
+
+```
+PP T NNNNNN...N C
+│  │ │          └── 1-char check (base36)
+│  │ └───────────── encoded path (base36)
+│  └─────────────── type+mode combined (1 char)
+└────────────────── prefix (base36, 0a-0v)
+```
+
+---
+
+## Minimal Format (13 digits)
+
+```
+PP T M HHHHHHHH C
+│  │ │ │        └── 1-digit check
+│  │ │ └─────────── path hash (8 digits)
+│  │ └───────────── permission mode (0-9)
+│  └─────────────── file type (0-7)
+└────────────────── prefix (00-25)
+```
+
+**Note:** Hash-based, requires storage for decoding.
+
+---
+
+## Prefixes
 
 | Code | Path | Code | Path |
 |------|------|------|------|
@@ -40,51 +70,7 @@ PP T M NNNNNNNN...NNN CC
 | `11` | `/dev/` | `24` | `/var/lib/` |
 | `12` | `/proc/` | `25` | `/var/cache/` |
 
-### Permission Modes
-
-| Code | Symbolic | Octal |
-|------|----------|-------|
-| `0` | `-rw-r--r--` | 644 |
-| `1` | `-rwxr-xr-x` | 755 |
-| `2` | `-rw-------` | 600 |
-| `3` | `-rwx------` | 700 |
-| `4` | `-rw-rw-r--` | 664 |
-| `5` | `-rwxrwxr-x` | 775 |
-| `6` | `drwxr-xr-x` | 755 |
-| `7` | `drwx------` | 700 |
-| `8` | `lrwxrwxrwx` | 777 |
-| `9` | custom | — |
-
----
-
-## Short Format
-
-```
-PP T NNNNNN...N C
-│  │ │          └── 1-char check (base36)
-│  │ └───────────── encoded path (base36)
-│  └─────────────── type+mode combined (1 char)
-└────────────────── prefix (base36, 0a-0v)
-```
-
-### Prefixes (Short, additional)
-
-| Code | Path | Code | Path |
-|------|------|------|------|
-| `0a` | `/boot/` | `0n` | `/var/log/` |
-| `0b` | `/dev/` | `0o` | `/var/lib/` |
-| `0j` | `/usr/bin/` | `0u` | `/usr/local/bin/` |
-| `0k` | `/usr/lib/` | `0v` | `/usr/local/lib/` |
-
-### Type+Mode Codes
-
-| Code | Type | Mode | Code | Type | Mode |
-|------|------|------|------|------|------|
-| `0` | file | 644 | `8` | dir | 755 |
-| `1` | file | 755 | `9` | dir | 700 |
-| `2` | file | 600 | `a` | dir | 775 |
-| `3` | file | 700 | `c` | symlink | — |
-| `z` | other | — | | | |
+Short format also supports: `0a`-`0v` for additional paths.
 
 ---
 
@@ -102,20 +88,41 @@ PP T NNNNNN...N C
 
 ---
 
-## Path Encoding
+## Permission Modes
 
-1. Remove matching prefix from path
-2. Convert remaining bytes to big integer (base256)
-3. Convert to target base (10 or 36)
-
-Fully reversible — no information lost.
+| Code | Symbolic | Octal |
+|------|----------|-------|
+| `0` | `-rw-r--r--` | 644 |
+| `1` | `-rwxr-xr-x` | 755 |
+| `2` | `-rw-------` | 600 |
+| `3` | `-rwx------` | 700 |
+| `4` | `-rw-rw-r--` | 664 |
+| `5` | `-rwxrwxr-x` | 775 |
+| `6` | `drwxr-xr-x` | 755 |
+| `7` | `drwx------` | 700 |
+| `8` | `lrwxrwxrwx` | 777 |
+| `9` | custom | — |
 
 ---
 
 ## Examples
 
-| Path | Standard | Short |
-|------|----------|-------|
-| `/etc/passwd` | `010012356385108566822` | `01017ssg6m1k4m` |
-| `/usr/bin/ls` | `19012776382` | `0j1lf7d` |
-| `/var/log/pacman.log` | `230053070154474625815992304716` | `0n02ef4ljd3yhuunkvba` |
+| Path | Standard | Short | Minimal |
+|------|----------|-------|---------|
+| `/etc/passwd` | `010012356385108566822` | `01017ssg6m1k4m` | `0100893316018` |
+| `/usr/bin/ls` | `19012776382` | `0j1lf7d` | `1901691270446` |
+
+---
+
+## Storage
+
+When using `--storage`, mappings are saved to a JSON file:
+
+```json
+{
+  "mappings": {
+    "0100893316018": "/etc/passwd",
+    "01017ssg6m1k4m": "/etc/passwd"
+  }
+}
+```
