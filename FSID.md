@@ -1,27 +1,33 @@
 # FSID - File System Identifier
 
-**FSID** is a 13-character identifier for files and directories, inspired by ISBN for books.
+**FSID** is a variable-length numeric identifier for files and directories, inspired by ISBN for books.
+
+## Key Feature: **No Storage Required**
+
+FSID encodes the **complete path** into the identifier itself. The path can be fully reconstructed from just the FSID — no database, no lookup table.
 
 ## Structure
 
 ```
-PP T M HHHHHHHH C
-│  │ │ │        └── Check digit (validation)
-│  │ │ └─────────── Path hash (8 digits, unique within prefix)
-│  │ └───────────── Permission mode (0-9)
-│  └─────────────── File type (0-7)
-└────────────────── Directory prefix (00-99)
+PP T M NNNNNNNN...NNN CC
+│  │ │ │              └── 2-digit check code
+│  │ │ └───────────────── encoded path (base256 → base10)
+│  │ └─────────────────── permission mode (0-9)
+│  └───────────────────── file type (0-7)
+└──────────────────────── directory prefix (00-99)
 ```
 
-**Total: 13 digits** (same as ISBN-13)
+**Typical length: 20-40 digits** (depends on path length)
 
 ---
 
 ## Directory Prefixes (PP)
 
+The prefix removes common path prefixes to shorten the FSID:
+
 | Prefix | Path |
 |--------|------|
-| `00` | `/` (root, unclassified) |
+| `00` | `/` (root) |
 | `01` | `/etc/` |
 | `02` | `/bin/` |
 | `03` | `/usr/` |
@@ -47,7 +53,6 @@ PP T M HHHHHHHH C
 | `23` | `/var/log/` |
 | `24` | `/var/lib/` |
 | `25` | `/var/cache/` |
-| `26-99` | Reserved / Custom |
 
 ---
 
@@ -68,66 +73,61 @@ PP T M HHHHHHHH C
 
 ## Permission Modes (M)
 
-Common Unix permissions encoded as single digit:
-
-| Code | Symbolic | Octal | Description |
-|------|----------|-------|-------------|
-| `0` | `-rw-r--r--` | 644 | Standard file |
-| `1` | `-rwxr-xr-x` | 755 | Executable |
-| `2` | `-rw-------` | 600 | Private file |
-| `3` | `-rwx------` | 700 | Private executable |
-| `4` | `-rw-rw-r--` | 664 | Group writable |
-| `5` | `-rwxrwxr-x` | 775 | Group executable |
-| `6` | `drwxr-xr-x` | 755 | Standard directory |
-| `7` | `drwx------` | 700 | Private directory |
-| `8` | `lrwxrwxrwx` | 777 | Symlink (always 777) |
-| `9` | `*` | Other | Custom/other permissions |
+| Code | Symbolic | Octal |
+|------|----------|-------|
+| `0` | `-rw-r--r--` | 644 |
+| `1` | `-rwxr-xr-x` | 755 |
+| `2` | `-rw-------` | 600 |
+| `3` | `-rwx------` | 700 |
+| `4` | `-rw-rw-r--` | 664 |
+| `5` | `-rwxrwxr-x` | 775 |
+| `6` | `drwxr-xr-x` | 755 |
+| `7` | `drwx------` | 700 |
+| `8` | `lrwxrwxrwx` | 777 |
+| `9` | custom | — |
 
 ---
 
-## Path Hash (HHHHHHHH)
+## Path Encoding
 
-8-digit hash derived from the full path using a deterministic hash function.
-This ensures uniqueness within each directory prefix category.
+The remaining path (after prefix removal) is encoded as:
+1. Convert path string to bytes (UTF-8)
+2. Interpret bytes as base-256 big integer
+3. Convert to base-10 (decimal digits)
+
+This encoding is **fully reversible** — no information is lost.
 
 ---
 
-## Check Digit (C)
+## Check Code (CC)
 
-Calculated using a weighted sum algorithm (similar to ISBN):
-- Multiply alternating digits by 1 and 3
-- Sum all results
-- Check digit = (10 - (sum mod 10)) mod 10
+Two-digit check code calculated using weighted sum:
+- Alternating digits multiplied by 1 and 3
+- Sum modulo 100
 
 ---
 
 ## Examples
 
-| FSID | Path | Decoded |
-|------|------|---------|
-| `0100123456785` | `/etc/passwd` | prefix=01(/etc), type=0(file), mode=0(644), hash=12345678, check=5 |
-| `0510987654323` | `/home/user/.bashrc` | prefix=05(/home), type=1(dir), mode=0(644), hash=98765432, check=3 |
-| `2320111111117` | `/var/log/syslog` | prefix=23(/var/log), type=0(file), mode=2(600), hash=01111111, check=7 |
+| FSID | Path | Length |
+|------|------|--------|
+| `010012356385108566822` | `/etc/passwd` | 21 digits |
+| `19012776382` | `/usr/bin/ls` | 11 digits |
+| `230053070154474625815992304716` | `/var/log/pacman.log` | 30 digits |
 
 ---
 
 ## Usage
 
 ```bash
-# Convert path to FSID
+# Encode path → FSID
 $ fsid to /etc/passwd
-0100123456785
+010012356385108566822
 
-# Convert FSID to path
-$ fsid from 0100123456785
+# Decode FSID → path
+$ fsid from 010012356385108566822
 /etc/passwd
 
-# Show detailed info
-$ fsid info 0100123456785
-FSID:   0100123456785
-Path:   /etc/passwd
-Prefix: /etc/ (01)
-Type:   Regular file (0)
-Mode:   -rw-r--r-- (644)
-Valid:  ✓
+# Show details
+$ fsid info 010012356385108566822
 ```

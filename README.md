@@ -1,6 +1,6 @@
 # FSID
 
-**ISBN for your filesystem.** A 13-digit identifier for files and directories.
+**ISBN for your filesystem.** A numeric identifier for files — no storage required.
 
 ## Install
 
@@ -11,37 +11,32 @@ cargo install --path .
 ## Usage
 
 ```bash
-# Generate FSID
+# Encode path → FSID
 fsid to /etc/passwd
-# → 0100893316018
+# → 010012356385108566822
 
-# Lookup path
-fsid from 0100893316018
+# Decode FSID → path
+fsid from 010012356385108566822
 # → /etc/passwd
 
-# Details
-fsid info 0100893316018
-
-# List all
-fsid list
+# Show details
+fsid info 010012356385108566822
 ```
 
 ## Structure
 
 ```
-01 0 0 89331601 8
-│  │ │ │        └─ check digit
-│  │ │ └────────── path hash (8 digits)
-│  │ └──────────── permissions (0-9)
-│  └────────────── type (file/dir/symlink)
-└───────────────── prefix (/etc/ = 01)
+01 0 0 12356385108566 822
+│  │ │ │              └── check (2 digits)
+│  │ │ └───────────────── encoded path
+│  │ └─────────────────── permissions (644)
+│  └───────────────────── type (file)
+└──────────────────────── prefix (/etc/)
 ```
 
+The path is encoded directly into the FSID — fully reversible, no database needed.
+
 See [FSID.md](FSID.md) for the full specification.
-
-## Storage
-
-FSID stores its mappings in a JSON file at `~/.local/share/fsid/storage.json`.
 
 ## License
 

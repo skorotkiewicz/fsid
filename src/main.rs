@@ -1,14 +1,12 @@
 use clap::{Parser, Subcommand};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// FSID - File System Identifier (like ISBN for files)
 #[derive(Parser)]
 #[command(name = "fsid")]
-#[command(about = "FSID - A 13-digit identifier for files, like ISBN for books")]
+#[command(about = "FSID - A self-contained identifier for files, like ISBN for books")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -23,16 +21,14 @@ enum Commands {
     },
     /// Convert an FSID back to its file path
     From {
-        /// The 13-digit FSID
+        /// The FSID (variable length, typically 20-40 digits)
         fsid: String,
     },
     /// Show detailed information about an FSID
     Info {
-        /// The 13-digit FSID
+        /// The FSID
         fsid: String,
     },
-    /// List all registered FSIDs
-    List,
 }
 
 /// Directory prefix mappings (PP component)
@@ -78,59 +74,19 @@ const MODES: &[(u8, u32, &str)] = &[
     (8, 0o777, "lrwxrwxrwx"),
 ];
 
-/// Storage for FSID -> Path mappings
-#[derive(Serialize, Deserialize, Default)]
-struct FsidStorage {
-    mappings: HashMap<String, String>,
-}
-
-impl FsidStorage {
-    fn load() -> Self {
-        let path = Self::storage_path();
-        if path.exists() {
-            let content = fs::read_to_string(&path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or_default()
-        } else {
-            Self::default()
-        }
-    }
-
-    fn save(&self) {
-        let path = Self::storage_path();
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let content = serde_json::to_string_pretty(self).unwrap();
-        let _ = fs::write(path, content);
-    }
-
-    fn storage_path() -> PathBuf {
-        dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("fsid")
-            .join("storage.json")
-    }
-
-    fn insert(&mut self, fsid: String, path: String) {
-        self.mappings.insert(fsid, path);
-        self.save();
-    }
-
-    fn get(&self, fsid: &str) -> Option<&String> {
-        self.mappings.get(fsid)
-    }
-}
-
-/// Get the directory prefix code for a path
-fn get_prefix_code(path: &str) -> &'static str {
+/// Get the directory prefix code and remaining path
+fn get_prefix_and_remainder(path: &str) -> (&'static str, &str) {
     // Find the most specific (longest) matching prefix
-    let mut best_match = ("00", "/");
+    let mut best_match = ("00", "/", "");
     for &(code, prefix) in PREFIXES.iter().skip(1) {
         if path.starts_with(prefix) && prefix.len() > best_match.1.len() {
-            best_match = (code, prefix);
+            best_match = (code, prefix, &path[prefix.len()..]);
         }
     }
-    best_match.0
+    if best_match.0 == "00" && path.starts_with('/') {
+        return ("00", &path[1..]);
+    }
+    (best_match.0, best_match.2)
 }
 
 /// Get the prefix path from a code
@@ -141,27 +97,18 @@ fn get_prefix_path(code: &str) -> Option<&'static str> {
 /// Determine file type code (T component)
 fn get_file_type_code(path: &Path) -> u8 {
     if path.is_symlink() {
-        return 2; // Symlink
+        return 2;
     }
-
     match fs::metadata(path) {
         Ok(meta) => {
             let ft = meta.file_type();
-            if ft.is_dir() {
-                1
-            } else if ft.is_file() {
-                0
-            } else if ft.is_socket() {
-                4
-            } else if ft.is_fifo() {
-                5
-            } else if ft.is_block_device() {
-                6
-            } else if ft.is_char_device() {
-                7
-            } else {
-                0
-            }
+            if ft.is_dir() { 1 }
+            else if ft.is_file() { 0 }
+            else if ft.is_socket() { 4 }
+            else if ft.is_fifo() { 5 }
+            else if ft.is_block_device() { 6 }
+            else if ft.is_char_device() { 7 }
+            else { 0 }
         }
         Err(_) => 0,
     }
@@ -188,12 +135,8 @@ fn get_mode_code(path: &Path) -> u8 {
         Ok(meta) => meta.permissions().mode() & 0o777,
         Err(_) => return 9,
     };
-
-    // Find matching mode or return 9 (other)
     for &(code, octal, _) in MODES {
-        if mode == octal {
-            return code;
-        }
+        if mode == octal { return code; }
     }
     9
 }
@@ -208,58 +151,131 @@ fn get_mode_description(code: u8) -> (&'static str, u32) {
     ("custom", 0)
 }
 
-/// Generate 8-digit path hash
-fn generate_path_hash(path: &str) -> String {
-    // Simple deterministic hash using djb2 algorithm
-    let mut hash: u64 = 5381;
-    for byte in path.bytes() {
-        hash = hash.wrapping_mul(33).wrapping_add(byte as u64);
+/// Encode bytes to decimal string (base256 → base10)
+fn bytes_to_decimal(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return "0".to_string();
     }
-    // Take last 8 digits
-    format!("{:08}", hash % 100_000_000)
+    
+    // Convert bytes to a big integer (base 256)
+    // Then convert to decimal string
+    let mut result = Vec::new();
+    let mut temp = bytes.to_vec();
+    
+    while !temp.is_empty() && !(temp.len() == 1 && temp[0] == 0) {
+        let mut remainder = 0u16;
+        let mut new_temp = Vec::new();
+        
+        for &byte in &temp {
+            let value = remainder * 256 + byte as u16;
+            let quotient = value / 10;
+            remainder = value % 10;
+            
+            if !new_temp.is_empty() || quotient > 0 {
+                new_temp.push(quotient as u8);
+            }
+        }
+        
+        result.push((remainder as u8) + b'0');
+        temp = new_temp;
+    }
+    
+    if result.is_empty() {
+        "0".to_string()
+    } else {
+        result.reverse();
+        String::from_utf8(result).unwrap()
+    }
 }
 
-/// Calculate check digit (similar to ISBN-13)
-fn calculate_check_digit(digits: &str) -> char {
+/// Decode decimal string to bytes (base10 → base256)
+fn decimal_to_bytes(decimal: &str) -> Vec<u8> {
+    if decimal == "0" || decimal.is_empty() {
+        return Vec::new();
+    }
+    
+    let mut digits: Vec<u8> = decimal.bytes().map(|b| b - b'0').collect();
+    let mut result = Vec::new();
+    
+    while !digits.is_empty() && !(digits.len() == 1 && digits[0] == 0) {
+        let mut remainder = 0u16;
+        let mut new_digits = Vec::new();
+        
+        for &digit in &digits {
+            let value = remainder * 10 + digit as u16;
+            let quotient = value / 256;
+            remainder = value % 256;
+            
+            if !new_digits.is_empty() || quotient > 0 {
+                new_digits.push(quotient as u8);
+            }
+        }
+        
+        result.push(remainder as u8);
+        digits = new_digits;
+    }
+    
+    result.reverse();
+    result
+}
+
+/// Calculate 2-digit check code
+fn calculate_check(digits: &str) -> String {
     let sum: u32 = digits
         .chars()
         .enumerate()
         .filter_map(|(i, c)| {
-            c.to_digit(10).map(|d| {
-                if i % 2 == 0 { d } else { d * 3 }
-            })
+            c.to_digit(10).map(|d| if i % 2 == 0 { d } else { d * 3 })
         })
         .sum();
-
-    let check = (10 - (sum % 10)) % 10;
-    char::from_digit(check, 10).unwrap()
+    format!("{:02}", sum % 100)
 }
 
-/// Validate FSID check digit
+/// Validate FSID check digits
 fn validate_fsid(fsid: &str) -> bool {
-    if fsid.len() != 13 || !fsid.chars().all(|c| c.is_ascii_digit()) {
+    if fsid.len() < 8 || !fsid.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
-    let check = calculate_check_digit(&fsid[..12]);
-    fsid.chars().last() == Some(check)
+    let check = calculate_check(&fsid[..fsid.len()-2]);
+    fsid.ends_with(&check)
 }
 
-/// Generate FSID for a path
+/// Generate FSID for a path (no storage needed!)
 fn generate_fsid(path: &str) -> String {
     let path_obj = Path::new(path);
     let canonical = fs::canonicalize(path_obj)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| path.to_string());
 
-    let prefix = get_prefix_code(&canonical);
+    let (prefix, remainder) = get_prefix_and_remainder(&canonical);
     let file_type = get_file_type_code(path_obj);
     let mode = get_mode_code(path_obj);
-    let hash = generate_path_hash(&canonical);
+    let encoded_path = bytes_to_decimal(remainder.as_bytes());
 
-    let partial = format!("{}{}{}{}", prefix, file_type, mode, hash);
-    let check = calculate_check_digit(&partial);
+    let partial = format!("{}{}{}{}", prefix, file_type, mode, encoded_path);
+    let check = calculate_check(&partial);
 
     format!("{}{}", partial, check)
+}
+
+/// Decode FSID back to path (no storage needed!)
+fn decode_fsid(fsid: &str) -> Option<String> {
+    if fsid.len() < 8 {
+        return None;
+    }
+    
+    let prefix_code = &fsid[0..2];
+    let encoded_path = &fsid[4..fsid.len()-2];
+    
+    let prefix_path = get_prefix_path(prefix_code)?;
+    let path_bytes = decimal_to_bytes(encoded_path);
+    let relative_path = String::from_utf8(path_bytes).ok()?;
+    
+    if prefix_path == "/" {
+        Some(format!("/{}", relative_path))
+    } else {
+        Some(format!("{}{}", prefix_path, relative_path))
+    }
 }
 
 /// Parse FSID components
@@ -268,45 +284,45 @@ struct FsidInfo {
     prefix_path: String,
     file_type_code: u8,
     file_type_name: String,
-    _mode_code: u8,
     mode_symbolic: String,
     mode_octal: u32,
-    hash: String,
-    check_digit: char,
+    _encoded_path: String,
+    decoded_path: String,
+    check: String,
     valid: bool,
 }
 
 fn parse_fsid(fsid: &str) -> Option<FsidInfo> {
-    if fsid.len() != 13 {
+    if fsid.len() < 8 {
         return None;
     }
 
     let prefix_code = &fsid[0..2];
     let file_type_code = fsid[2..3].parse::<u8>().ok()?;
     let mode_code = fsid[3..4].parse::<u8>().ok()?;
-    let hash = &fsid[4..12];
-    let check_digit = fsid.chars().last()?;
+    let encoded_path = &fsid[4..fsid.len()-2];
+    let check = &fsid[fsid.len()-2..];
 
     let prefix_path = get_prefix_path(prefix_code).unwrap_or("/");
     let (mode_symbolic, mode_octal) = get_mode_description(mode_code);
+    let decoded_path = decode_fsid(fsid).unwrap_or_else(|| "(decode error)".to_string());
 
     Some(FsidInfo {
         prefix_code: prefix_code.to_string(),
         prefix_path: prefix_path.to_string(),
         file_type_code,
         file_type_name: get_file_type_name(file_type_code).to_string(),
-        _mode_code: mode_code,
         mode_symbolic: mode_symbolic.to_string(),
         mode_octal,
-        hash: hash.to_string(),
-        check_digit,
+        _encoded_path: encoded_path.to_string(),
+        decoded_path,
+        check: check.to_string(),
         valid: validate_fsid(fsid),
     })
 }
 
 fn main() {
     let cli = Cli::parse();
-    let mut storage = FsidStorage::load();
 
     match cli.command {
         Commands::To { path } => {
@@ -315,27 +331,18 @@ fn main() {
                 eprintln!("Error: Path does not exist: {}", path);
                 std::process::exit(1);
             }
-
-            let fsid = generate_fsid(&path);
-            let canonical = fs::canonicalize(path_obj)
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| path.clone());
-
-            storage.insert(fsid.clone(), canonical);
-            println!("{}", fsid);
+            println!("{}", generate_fsid(&path));
         }
 
         Commands::From { fsid } => {
             if !validate_fsid(&fsid) {
-                eprintln!("Error: Invalid FSID (check digit mismatch or wrong format)");
+                eprintln!("Error: Invalid FSID (check digit mismatch)");
                 std::process::exit(1);
             }
-
-            match storage.get(&fsid) {
+            match decode_fsid(&fsid) {
                 Some(path) => println!("{}", path),
                 None => {
-                    eprintln!("Error: FSID not found in storage");
-                    eprintln!("Hint: Use 'fsid to <path>' to register a file first");
+                    eprintln!("Error: Failed to decode FSID");
                     std::process::exit(1);
                 }
             }
@@ -344,48 +351,31 @@ fn main() {
         Commands::Info { fsid } => {
             match parse_fsid(&fsid) {
                 Some(info) => {
-                    let stored_path = storage.get(&fsid).map(|s| s.as_str()).unwrap_or("(not registered)");
                     let valid_mark = if info.valid { "✓" } else { "✗" };
-
-                    println!("┌─────────────────────────────────────┐");
-                    println!("│           FSID Information          │");
-                    println!("├─────────────────────────────────────┤");
-                    println!("│ FSID:   {}             │", fsid);
-                    println!("├─────────────────────────────────────┤");
-                    println!("│ Prefix: {} ({})                     │", info.prefix_path, info.prefix_code);
-                    println!("│ Type:   {} ({})          │", info.file_type_name, info.file_type_code);
-                    println!("│ Mode:   {} ({:o})        │", info.mode_symbolic, info.mode_octal);
-                    println!("│ Hash:   {}                  │", info.hash);
-                    println!("│ Check:  {}                          │", info.check_digit);
-                    println!("├─────────────────────────────────────┤");
-                    println!("│ Valid:  {}                          │", valid_mark);
-                    println!("│ Path:   {} │", stored_path);
-                    println!("└─────────────────────────────────────┘");
+                    println!("┌────────────────────────────────────────────────────┐");
+                    println!("│                 FSID Information                   │");
+                    println!("├────────────────────────────────────────────────────┤");
+                    println!("│ FSID:    {:<41} │", &fsid[..fsid.len().min(41)]);
+                    if fsid.len() > 41 {
+                        println!("│          {:<41} │", &fsid[41..]);
+                    }
+                    println!("├────────────────────────────────────────────────────┤");
+                    println!("│ Prefix:  {:10} ({})                          │", info.prefix_path, info.prefix_code);
+                    println!("│ Type:    {:16} ({})                    │", info.file_type_name, info.file_type_code);
+                    println!("│ Mode:    {:10} ({:o})                        │", info.mode_symbolic, info.mode_octal);
+                    println!("│ Check:   {:2}                                       │", info.check);
+                    println!("├────────────────────────────────────────────────────┤");
+                    println!("│ Valid:   {}                                        │", valid_mark);
+                    println!("│ Path:    {:<41} │", &info.decoded_path[..info.decoded_path.len().min(41)]);
+                    if info.decoded_path.len() > 41 {
+                        println!("│          {:<41} │", &info.decoded_path[41..]);
+                    }
+                    println!("└────────────────────────────────────────────────────┘");
                 }
                 None => {
-                    eprintln!("Error: Invalid FSID format (expected 13 digits)");
+                    eprintln!("Error: Invalid FSID format");
                     std::process::exit(1);
                 }
-            }
-        }
-
-        Commands::List => {
-            if storage.mappings.is_empty() {
-                println!("No FSIDs registered yet.");
-                println!("Use 'fsid to <path>' to register files.");
-            } else {
-                println!("┌───────────────┬────────────────────────────────────────────┐");
-                println!("│     FSID      │ Path                                       │");
-                println!("├───────────────┼────────────────────────────────────────────┤");
-                for (fsid, path) in &storage.mappings {
-                    let short_path = if path.len() > 40 {
-                        format!("...{}", &path[path.len()-37..])
-                    } else {
-                        path.clone()
-                    };
-                    println!("│ {} │ {:42} │", fsid, short_path);
-                }
-                println!("└───────────────┴────────────────────────────────────────────┘");
             }
         }
     }
