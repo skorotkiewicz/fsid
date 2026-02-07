@@ -29,9 +29,6 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             name: fsid-macos-aarch64
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            name: fsid-windows-x86_64.exe
 
     steps:
       - name: Checkout
@@ -54,10 +51,6 @@ jobs:
       - name: Rename binary (Unix)
         if: matrix.os != 'windows-latest'
         run: mv target/${{ matrix.target }}/release/fsid ${{ matrix.name }}
-
-      - name: Rename binary (Windows)
-        if: matrix.os == 'windows-latest'
-        run: mv target/${{ matrix.target }}/release/fsid.exe ${{ matrix.name }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
