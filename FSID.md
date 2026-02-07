@@ -1,77 +1,46 @@
 # FSID - File System Identifier
 
-**FSID** is a variable-length numeric identifier for files and directories, inspired by ISBN for books.
+A self-contained identifier for files and directories.
 
-## Key Feature: **No Storage Required**
+## Two Formats
 
-FSID encodes the **complete path** into the identifier itself. The path can be fully reconstructed from just the FSID — no database, no lookup table.
+| Format | Encoding | Length | Check |
+|--------|----------|--------|-------|
+| **Standard** | Base10 (0-9) | 20-40 digits | 2 digits |
+| **Short** | Base36 (0-9, a-z) | 7-25 chars | 1 char |
 
-## Structure
+---
+
+## Standard Format
 
 ```
 PP T M NNNNNNNN...NNN CC
-│  │ │ │              └── 2-digit check code
-│  │ │ └───────────────── encoded path (base256 → base10)
+│  │ │ │              └── 2-digit check
+│  │ │ └───────────────── encoded path (base10)
 │  │ └─────────────────── permission mode (0-9)
 │  └───────────────────── file type (0-7)
-└──────────────────────── directory prefix (00-99)
+└──────────────────────── prefix (00-25)
 ```
 
-**Typical length: 20-40 digits** (depends on path length)
+### Prefixes (Standard)
 
----
+| Code | Path | Code | Path |
+|------|------|------|------|
+| `00` | `/` | `13` | `/sys/` |
+| `01` | `/etc/` | `14` | `/run/` |
+| `02` | `/bin/` | `15` | `/mnt/` |
+| `03` | `/usr/` | `16` | `/media/` |
+| `04` | `/var/` | `17` | `/root/` |
+| `05` | `/home/` | `18` | `/sbin/` |
+| `06` | `/tmp/` | `19` | `/usr/bin/` |
+| `07` | `/opt/` | `20` | `/usr/lib/` |
+| `08` | `/lib/` | `21` | `/usr/share/` |
+| `09` | `/srv/` | `22` | `/usr/local/` |
+| `10` | `/boot/` | `23` | `/var/log/` |
+| `11` | `/dev/` | `24` | `/var/lib/` |
+| `12` | `/proc/` | `25` | `/var/cache/` |
 
-## Directory Prefixes (PP)
-
-The prefix removes common path prefixes to shorten the FSID:
-
-| Prefix | Path |
-|--------|------|
-| `00` | `/` (root) |
-| `01` | `/etc/` |
-| `02` | `/bin/` |
-| `03` | `/usr/` |
-| `04` | `/var/` |
-| `05` | `/home/` |
-| `06` | `/tmp/` |
-| `07` | `/opt/` |
-| `08` | `/lib/` |
-| `09` | `/srv/` |
-| `10` | `/boot/` |
-| `11` | `/dev/` |
-| `12` | `/proc/` |
-| `13` | `/sys/` |
-| `14` | `/run/` |
-| `15` | `/mnt/` |
-| `16` | `/media/` |
-| `17` | `/root/` |
-| `18` | `/sbin/` |
-| `19` | `/usr/bin/` |
-| `20` | `/usr/lib/` |
-| `21` | `/usr/share/` |
-| `22` | `/usr/local/` |
-| `23` | `/var/log/` |
-| `24` | `/var/lib/` |
-| `25` | `/var/cache/` |
-
----
-
-## File Types (T)
-
-| Code | Type |
-|------|------|
-| `0` | Regular file |
-| `1` | Directory |
-| `2` | Symbolic link |
-| `3` | Hard link |
-| `4` | Socket |
-| `5` | Named pipe (FIFO) |
-| `6` | Block device |
-| `7` | Character device |
-
----
-
-## Permission Modes (M)
+### Permission Modes
 
 | Code | Symbolic | Octal |
 |------|----------|-------|
@@ -88,46 +57,65 @@ The prefix removes common path prefixes to shorten the FSID:
 
 ---
 
-## Path Encoding
+## Short Format
 
-The remaining path (after prefix removal) is encoded as:
-1. Convert path string to bytes (UTF-8)
-2. Interpret bytes as base-256 big integer
-3. Convert to base-10 (decimal digits)
+```
+PP T NNNNNN...N C
+│  │ │          └── 1-char check (base36)
+│  │ └───────────── encoded path (base36)
+│  └─────────────── type+mode combined (1 char)
+└────────────────── prefix (base36, 0a-0v)
+```
 
-This encoding is **fully reversible** — no information is lost.
+### Prefixes (Short, additional)
+
+| Code | Path | Code | Path |
+|------|------|------|------|
+| `0a` | `/boot/` | `0n` | `/var/log/` |
+| `0b` | `/dev/` | `0o` | `/var/lib/` |
+| `0j` | `/usr/bin/` | `0u` | `/usr/local/bin/` |
+| `0k` | `/usr/lib/` | `0v` | `/usr/local/lib/` |
+
+### Type+Mode Codes
+
+| Code | Type | Mode | Code | Type | Mode |
+|------|------|------|------|------|------|
+| `0` | file | 644 | `8` | dir | 755 |
+| `1` | file | 755 | `9` | dir | 700 |
+| `2` | file | 600 | `a` | dir | 775 |
+| `3` | file | 700 | `c` | symlink | — |
+| `z` | other | — | | | |
 
 ---
 
-## Check Code (CC)
+## File Types
 
-Two-digit check code calculated using weighted sum:
-- Alternating digits multiplied by 1 and 3
-- Sum modulo 100
+| Code | Type |
+|------|------|
+| `0` | Regular file |
+| `1` | Directory |
+| `2` | Symbolic link |
+| `4` | Socket |
+| `5` | Named pipe (FIFO) |
+| `6` | Block device |
+| `7` | Character device |
+
+---
+
+## Path Encoding
+
+1. Remove matching prefix from path
+2. Convert remaining bytes to big integer (base256)
+3. Convert to target base (10 or 36)
+
+Fully reversible — no information lost.
 
 ---
 
 ## Examples
 
-| FSID | Path | Length |
-|------|------|--------|
-| `010012356385108566822` | `/etc/passwd` | 21 digits |
-| `19012776382` | `/usr/bin/ls` | 11 digits |
-| `230053070154474625815992304716` | `/var/log/pacman.log` | 30 digits |
-
----
-
-## Usage
-
-```bash
-# Encode path → FSID
-$ fsid to /etc/passwd
-010012356385108566822
-
-# Decode FSID → path
-$ fsid from 010012356385108566822
-/etc/passwd
-
-# Show details
-$ fsid info 010012356385108566822
-```
+| Path | Standard | Short |
+|------|----------|-------|
+| `/etc/passwd` | `010012356385108566822` | `01017ssg6m1k4m` |
+| `/usr/bin/ls` | `19012776382` | `0j1lf7d` |
+| `/var/log/pacman.log` | `230053070154474625815992304716` | `0n02ef4ljd3yhuunkvba` |
