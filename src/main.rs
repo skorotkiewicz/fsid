@@ -208,23 +208,28 @@ fn print_minimal_info(fsid: &str, stored_path: Option<&str>) {
         Some(info) => {
             let valid_mark = if info.valid { "✓" } else { "✗" };
             let path_display = stored_path.unwrap_or("(not in storage)");
+            let w = 50; // inner width
 
-            println!("┌─────────────────────────────────────────┐");
-            println!("│        FSID Information (minimal)       │");
-            println!("├─────────────────────────────────────────┤");
-            println!("│ FSID:   {}                     │", fsid);
-            println!("├─────────────────────────────────────────┤");
-            println!("│ Prefix: {:8} ({})                 │", info.prefix_path, info.prefix_code);
-            println!("│ Type:   {:14} ({})          │", get_file_type_name(info.file_type_code), info.file_type_code);
-            println!("│ Mode:   {:10} ({:o})              │", info.mode_symbolic, info.mode_octal);
-            println!("│ Hash:   {}                      │", info.hash);
-            println!("│ Check:  {}  Valid: {}                    │", info.check_digit, valid_mark);
-            println!("├─────────────────────────────────────────┤");
-            println!("│ Path:   {:<31} │", &path_display[..path_display.len().min(31)]);
-            if path_display.len() > 31 {
-                println!("│         {:<31} │", &path_display[31..path_display.len().min(62)]);
+            println!("┌{}┐", "─".repeat(w));
+            println!("│{:^w$}│", "FSID Information (minimal)");
+            println!("├{}┤", "─".repeat(w));
+            println!("│ FSID:   {:<w2$} │", fsid, w2 = w - 10);
+            println!("├{}┤", "─".repeat(w));
+            let prefix_line = format!("{} ({})", info.prefix_path, info.prefix_code);
+            let type_line = format!("{} ({})", get_file_type_name(info.file_type_code), info.file_type_code);
+            let mode_line = format!("{} ({:o})", info.mode_symbolic, info.mode_octal);
+            let check_line = format!("{}   Valid: {}", info.check_digit, valid_mark);
+            println!("│ Prefix: {:<w2$} │", prefix_line, w2 = w - 10);
+            println!("│ Type:   {:<w2$} │", type_line, w2 = w - 10);
+            println!("│ Mode:   {:<w2$} │", mode_line, w2 = w - 10);
+            println!("│ Hash:   {:<w2$} │", info.hash, w2 = w - 10);
+            println!("│ Check:  {:<w2$} │", check_line, w2 = w - 10);
+            println!("├{}┤", "─".repeat(w));
+            println!("│ Path:   {:<w2$} │", &path_display[..path_display.len().min(w - 10)], w2 = w - 10);
+            if path_display.len() > w - 10 {
+                println!("│         {:<w2$} │", &path_display[w - 10..path_display.len().min((w - 10) * 2)], w2 = w - 10);
             }
-            println!("└─────────────────────────────────────────┘");
+            println!("└{}┘", "─".repeat(w));
         }
         None => {
             eprintln!("Error: Invalid FSID format");
@@ -247,22 +252,27 @@ fn print_short_info(fsid: &str, stored_path: Option<&str>) {
     let decoded_path = short::decode(fsid).unwrap_or_else(|| "(decode error)".to_string());
     let path_display = stored_path.unwrap_or(&decoded_path);
     let valid_mark = if valid { "✓" } else { "✗" };
+    let w = 50;
 
-    println!("┌──────────────────────────────────────────────┐");
-    println!("│         FSID Information (short)             │");
-    println!("├──────────────────────────────────────────────┤");
-    println!("│ FSID:   {:<36} │", fsid);
-    println!("├──────────────────────────────────────────────┤");
-    println!("│ Prefix: {:<8} ({})                       │", prefix_path, prefix_code);
-    println!("│ Type:   {:<14} ({})                │", get_file_type_name(file_type), type_desc);
-    println!("│ Mode:   {:o}                                  │", mode);
-    println!("│ Check:  {}  Valid: {}                        │", check, valid_mark);
-    println!("├──────────────────────────────────────────────┤");
-    println!("│ Path:   {:<36} │", &path_display[..path_display.len().min(36)]);
-    if path_display.len() > 36 {
-        println!("│         {:<36} │", &path_display[36..path_display.len().min(72)]);
+    println!("┌{}┐", "─".repeat(w));
+    println!("│{:^w$}│", "FSID Information (short)");
+    println!("├{}┤", "─".repeat(w));
+    println!("│ FSID:   {:<w2$} │", fsid, w2 = w - 10);
+    println!("├{}┤", "─".repeat(w));
+    let prefix_line = format!("{} ({})", prefix_path, prefix_code);
+    let type_line = format!("{} ({})", get_file_type_name(file_type), type_desc);
+    let mode_line = format!("{:o}", mode);
+    let check_line = format!("{}   Valid: {}", check, valid_mark);
+    println!("│ Prefix: {:<w2$} │", prefix_line, w2 = w - 10);
+    println!("│ Type:   {:<w2$} │", type_line, w2 = w - 10);
+    println!("│ Mode:   {:<w2$} │", mode_line, w2 = w - 10);
+    println!("│ Check:  {:<w2$} │", check_line, w2 = w - 10);
+    println!("├{}┤", "─".repeat(w));
+    println!("│ Path:   {:<w2$} │", &path_display[..path_display.len().min(w - 10)], w2 = w - 10);
+    if path_display.len() > w - 10 {
+        println!("│         {:<w2$} │", &path_display[w - 10..path_display.len().min((w - 10) * 2)], w2 = w - 10);
     }
-    println!("└──────────────────────────────────────────────┘");
+    println!("└{}┘", "─".repeat(w));
 }
 
 fn print_standard_info(fsid: &str, stored_path: Option<&str>) {
@@ -280,24 +290,28 @@ fn print_standard_info(fsid: &str, stored_path: Option<&str>) {
     let decoded_path = standard::decode(fsid).unwrap_or_else(|| "(decode error)".to_string());
     let path_display = stored_path.unwrap_or(&decoded_path);
     let valid_mark = if valid { "✓" } else { "✗" };
+    let w = 50;
 
-    println!("┌────────────────────────────────────────────────────┐");
-    println!("│            FSID Information (standard)             │");
-    println!("├────────────────────────────────────────────────────┤");
-    println!("│ FSID:    {:<41} │", &fsid[..fsid.len().min(41)]);
-    if fsid.len() > 41 {
-        println!("│          {:<41} │", &fsid[41..]);
+    println!("┌{}┐", "─".repeat(w));
+    println!("│{:^w$}│", "FSID Information (standard)");
+    println!("├{}┤", "─".repeat(w));
+    println!("│ FSID:   {:<w2$} │", &fsid[..fsid.len().min(w - 10)], w2 = w - 10);
+    if fsid.len() > w - 10 {
+        println!("│         {:<w2$} │", &fsid[w - 10..fsid.len().min((w - 10) * 2)], w2 = w - 10);
     }
-    println!("├────────────────────────────────────────────────────┤");
-    println!("│ Prefix:  {:10} ({})                          │", prefix_path, prefix_code);
-    println!("│ Type:    {:16} ({})                    │", get_file_type_name(file_type_code), file_type_code);
-    println!("│ Mode:    {:10} ({:o})                        │", mode_symbolic, mode_octal);
-    println!("│ Check:   {:2}                                       │", check);
-    println!("├────────────────────────────────────────────────────┤");
-    println!("│ Valid:   {}                                        │", valid_mark);
-    println!("│ Path:    {:<41} │", &path_display[..path_display.len().min(41)]);
-    if path_display.len() > 41 {
-        println!("│          {:<41} │", &path_display[41..]);
+    println!("├{}┤", "─".repeat(w));
+    let prefix_line = format!("{} ({})", prefix_path, prefix_code);
+    let type_line = format!("{} ({})", get_file_type_name(file_type_code), file_type_code);
+    let mode_line = format!("{} ({:o})", mode_symbolic, mode_octal);
+    let check_line = format!("{}   Valid: {}", check, valid_mark);
+    println!("│ Prefix: {:<w2$} │", prefix_line, w2 = w - 10);
+    println!("│ Type:   {:<w2$} │", type_line, w2 = w - 10);
+    println!("│ Mode:   {:<w2$} │", mode_line, w2 = w - 10);
+    println!("│ Check:  {:<w2$} │", check_line, w2 = w - 10);
+    println!("├{}┤", "─".repeat(w));
+    println!("│ Path:   {:<w2$} │", &path_display[..path_display.len().min(w - 10)], w2 = w - 10);
+    if path_display.len() > w - 10 {
+        println!("│         {:<w2$} │", &path_display[w - 10..path_display.len().min((w - 10) * 2)], w2 = w - 10);
     }
-    println!("└────────────────────────────────────────────────────┘");
+    println!("└{}┘", "─".repeat(w));
 }
