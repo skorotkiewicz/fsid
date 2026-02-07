@@ -56,6 +56,32 @@ fsid list --storage ./db.json
 
 See [FSID.md](FSID.md) for the full specification.
 
+## Use Case: Library File Barcodes
+
+Use 13-digit FSIDs as printed barcodes for a library or archive. Visitors scan a barcode to instantly locate files on your server:
+
+```bash
+# Register files with centralized storage
+fsid to /srv/library/manuals/user-guide.pdf --min --storage /srv/library/catalog.json
+# → 0900482716354
+
+fsid to /srv/library/reports/2024-annual.pdf --min --storage /srv/library/catalog.json
+# → 0901847293651
+
+# Print barcodes with these 13-digit IDs
+# When a visitor scans the barcode:
+fsid from 0900482716354 --storage /srv/library/catalog.json
+# → /srv/library/manuals/user-guide.pdf
+
+# View entire catalog
+fsid list --storage /srv/library/catalog.json
+```
+
+The 13-digit format is:
+- **ISBN-length** → fits standard barcode scanners (EAN-13, Code 128)
+- **Numeric-only** → maximum compatibility
+- **Structured** → prefix hints at file location (`09` = `/srv/`)
+
 ## License
 
 MIT
