@@ -2,10 +2,29 @@
 
 A self-contained identifier for files and directories.
 
-## Install
+## Installation
+
+### Arch Linux (AUR)
+
+You can install `fsid` from the AUR using your favorite helper:
 
 ```bash
+yay -S fsid
+# or
+paru -S fsid
+```
+
+### From Source
+
+```bash
+# Install from source
 cargo install --path .
+
+# Build from source
+cargo build --release
+
+# Move to bin
+mv target/release/fsid /usr/local/bin/
 ```
 
 ## Usage
