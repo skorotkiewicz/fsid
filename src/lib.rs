@@ -7,6 +7,7 @@ pub mod minimal;
 pub mod short;
 pub mod standard;
 pub mod storage;
+pub mod webapi;
 
 /// Check if FSID is in short format (contains lowercase letters)
 pub fn is_short_format(fsid: &str) -> bool {

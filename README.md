@@ -101,6 +101,20 @@ The 13-digit format is:
 - **Numeric-only** → maximum compatibility
 - **Structured** → prefix hints at file location (`09` = `/srv/`)
 
+## Web API
+
+Start a web server with embedded UI:
+
+```bash
+fsid serve --storage ./catalog.json
+# → http://127.0.0.1:8080
+```
+
+- **GET /** → Web UI
+- **POST /** → JSON API
+
+See [API.md](API.md) for the full API specification.
+
 ## License
 
 MIT

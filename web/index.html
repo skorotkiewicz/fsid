@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FSID</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>FSID</h1>
+  <p class="subtitle">File System Identifier</p>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" data-tab="to">Generate</button>
+      <button class="tab" data-tab="from">Decode</button>
+      <button class="tab" data-tab="info">Info</button>
+      <button class="tab" data-tab="list">List</button>
+    </div>
+
+    <!-- Generate -->
+    <div class="panel active" id="panel-to">
+      <label>File Path</label>
+      <input type="text" id="to-path" placeholder="/etc/passwd">
+      <label>Format</label>
+      <select id="to-format">
+        <option value="standard">Standard (base10)</option>
+        <option value="short">Short (base36)</option>
+        <option value="min">Minimal (13-digit)</option>
+      </select>
+      <button class="submit" onclick="doTo()">Generate FSID</button>
+      <div class="result" id="to-result">
+        <div class="result-label">FSID</div>
+        <div class="result-value" id="to-value"></div>
+      </div>
+    </div>
+
+    <!-- Decode -->
+    <div class="panel" id="panel-from">
+      <label>FSID</label>
+      <input type="text" id="from-fsid" placeholder="0100893316018">
+      <button class="submit" onclick="doFrom()">Decode</button>
+      <div class="result" id="from-result">
+        <div class="result-label">Path</div>
+        <div class="result-value" id="from-value"></div>
+      </div>
+    </div>
+
+    <!-- Info -->
+    <div class="panel" id="panel-info">
+      <label>FSID</label>
+      <input type="text" id="info-fsid" placeholder="0100893316018">
+      <button class="submit" onclick="doInfo()">Get Info</button>
+      <div class="result" id="info-result">
+        <div class="info-grid" id="info-value"></div>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div class="panel" id="panel-list">
+      <button class="submit" onclick="doList()">Refresh List</button>
+      <div class="result show" id="list-result">
+        <div class="list-table" id="list-value"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <a href="https://github.com/skorotkiewicz/fsid" target="_blank">GitHub</a>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

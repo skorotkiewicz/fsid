@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use fsid::constants::get_file_type_name;
 use fsid::storage::FsidStorage;
-use fsid::{is_short_format, minimal, short, standard};
+use fsid::{is_short_format, minimal, short, standard, webapi};
 
 /// FSID - File System Identifier
 #[derive(Parser)]
@@ -50,6 +50,15 @@ enum Commands {
     List {
         /// Path to storage JSON file
         #[arg(long)]
+        storage: PathBuf,
+    },
+    /// Start web API server
+    Serve {
+        /// Address to bind (default: 127.0.0.1:8080)
+        #[arg(short, long, default_value = "127.0.0.1:8080")]
+        addr: String,
+        /// Path to storage JSON file
+        #[arg(long, default_value = "./fsid-storage.json")]
         storage: PathBuf,
     },
 }
@@ -199,6 +208,10 @@ fn main() {
                 }
                 println!("└───────────────────────────┴────────────────────────────────────────────┘");
             }
+        }
+
+        Commands::Serve { addr, storage } => {
+            webapi::start_server(&addr, storage);
         }
     }
 }
